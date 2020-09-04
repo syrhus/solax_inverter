@@ -1,5 +1,5 @@
 # solax_inverter
-Domoticz plugin pour les onduleurs Solax
+Plugin python Domoticz pour les onduleurs Solax
 
 Ce plugin permet de rapatrier les données de productions des onduleurs Solax depuis le cloud.
 Pour pouvoir utiliser ce plugin, vous devez auparavant vous connecter avec votre compte sur https://www.solaxcloud.com et faire la demande d'un TokenID depuis le menu "Un Service"
@@ -9,7 +9,7 @@ Dans le plugin, il suffira ensuite de saisir le TokenID ainsi que le/les numéro
 
 
 
-Domoticz plugin for Solax inverters
+Domoticz python plugin for Solax inverters
 
 This plugin allow to use Solax API to connect and retrieve inverter data production from cloud.
 
