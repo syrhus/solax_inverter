@@ -4,7 +4,7 @@
 # Author: Syrhus
 #
 """
-<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.0.0" externallink="https://github.com/syrhus/solax_inverter">
+<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.0.1" externallink="https://github.com/syrhus/solax_inverter">
     <params>
         <param field="Mode1" label="TokenID" width="250px" required="true"/>
         <param field="Mode2" label="N°enregistrement(s) (si plusieurs, utiliser ',' pour séparer chaque onduleur)" width="300px" required="true"/>
@@ -42,6 +42,7 @@ class BasePlugin:
         self.currents = []
         self.cumuls = []
         self.invertersSN = list()
+        self.httpConn = None
         return
 
     def parseURL(self, Parameter):
@@ -50,9 +51,12 @@ class BasePlugin:
     def getData(self, num = 0):
 
         self.currentInverter = num
-                  
-        myConn = Domoticz.Connection(Name="Solax", Transport="TCP/IP", Protocol="HTTPS", Address=SOLAX_CLOUD_SITE, Port=SOLAX_CLOUD_PORT)
-        myConn.Connect()
+        if(not(self.httpConn and (self.httpConn.Connected() or self.httpConn.Connecting()))):
+            self.httpConn = Domoticz.Connection(Name="Solax", Transport="TCP/IP", Protocol="HTTPS", Address=SOLAX_CLOUD_SITE, Port=SOLAX_CLOUD_PORT)
+            self.httpConn.Connect()
+        else:
+            self.sendData(self.httpConn)
+
                    
     def addInverters(self):
         self.invertersSN = Parameters["Mode2"].split(',')
@@ -73,8 +77,9 @@ class BasePlugin:
         if(freq<1):
             Domoticz.Log("La fréquence de lecture des données ne peut pas être inférieure à 1 min")
             return
-            
-        self.beatcount = freq*6
+        
+        Domoticz.Heartbeat(20)    
+        self.beatcount = freq*3#freq*6
         Domoticz.Debug("beatcount :" + str(self.beatcount))
         
         self.addInverters()
@@ -98,24 +103,30 @@ class BasePlugin:
             if(len(self.invertersSN)>1):
                 Domoticz.Device(Name="Total", Unit=len(Devices)+1, TypeName="kWh", Used = 1).Create()          
                 Domoticz.Log("Device " + Devices[len(Devices)].Name + " created")
+                
+        self.heartbeat = self.beatcount
             
     def onStop(self):
         Domoticz.Log("Plugin is stopping.")
+        
+    def sendData(self, Connection):
+        if(Connection.Connected):
+            headers = dict({"Accept": "application/json", 
+            "Content-Type": "application/json",
+            #"Connection": "close",
+            "Host":SOLAX_CLOUD_SITE + SOLAX_CLOUD_PORT})
 
+            Domoticz.Debug("Current Inverter:" + str(self.currentInverter))
+            Connection.Send({
+                "Verb": "GET",
+                "URL": self.cmds[self.currentInverter],
+                "Headers": headers
+		    })
+		    
     def onConnect(self, Connection, Status, Description):
-
         Domoticz.Debug("Status:" + str(Status))
-         
-        headers = dict({"Accept": "application/json", 
-        "Content-Type": "application/json",
-        "Host":SOLAX_CLOUD_SITE + SOLAX_CLOUD_PORT})
-
-        Domoticz.Debug("Current Inverter:" + str(self.currentInverter))
-        Connection.Send({
-            "Verb": "GET",
-            "URL": self.cmds[self.currentInverter],
-            "Headers": headers
-        })
+        self.sendData(Connection)
+	
 
     def onMessage(self, Connection, Data):
         Domoticz.Debug("Data:" + str(Data))
@@ -133,11 +144,13 @@ class BasePlugin:
                 Domoticz.Debug("Load next inverter:" + str(self.currentInverter))
                 self.getData(self.currentInverter)
             else: 
+                #Connection.Disconnect()
                 self.currentInverter = 0
                 self.updateDevices()
 
     def onDisconnect(self, Connection):
         Domoticz.Log("Device has disconnected")
+        self.httpConn = None
 
     def onHeartbeat(self):
         Domoticz.Debug("onHeartbeat called")
@@ -150,8 +163,8 @@ class BasePlugin:
             else:
                 self.getData()
                 self.heartbeat = 0
-        else:
-            Domoticz.Debug("Night time, no data")
+#        else:
+#            Domoticz.Debug("Night time, no data")
 
     def updateDevices(self):
 
@@ -167,11 +180,11 @@ class BasePlugin:
             for i,d in enumerate(self.invertersSN):
                 
                 self.cumuls[nbInverters]+=self.cumuls[i]
-                Domoticz.Debug("self.cumuls[i]= " + str(self.cumuls[i]) )
-                Domoticz.Debug("self.cumuls[nbInverters]= " + str(self.cumuls[nbInverters]) )
+                Domoticz.Debug("self.cumuls[" + str(i) + "]= " + str(self.cumuls[i]) )
+                Domoticz.Debug("self.cumuls[" + str(nbInverters) + "]= " + str(self.cumuls[nbInverters]) )
                 self.currents[nbInverters]+=self.currents[i]
-                Domoticz.Debug("self.currents[i]= " + str(self.currents[i]) )
-                Domoticz.Debug("self.currents[nbInverters]= " + str(self.currents[nbInverters]) )
+                Domoticz.Debug("self.currents[" + str(i) + "]= " + str(self.currents[i]) )
+                Domoticz.Debug("self.currents[" + str(nbInverters) + "]= " + str(self.currents[nbInverters]) )
 
         for i,d in enumerate(Devices):
             self.updateDevice(i+1)
