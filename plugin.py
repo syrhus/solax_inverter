@@ -117,11 +117,11 @@ class BasePlugin:
         if (len(Devices) == 0):
             
             for idx,d in enumerate(self.invertersSN):
-                Domoticz.Device(Name= self.invertersSN[idx] , Unit=idx+1,Type=243,Subtype=29, Switchtype=4, Options={"EnergyMeterMode" : "1"}, Used = 1 ).Create() #TypeName="kWh"
+                Domoticz.Device(Name= self.invertersSN[idx] , Unit=idx+1,TypeName="kWh", Switchtype=4, Options={"EnergyMeterMode" : "0"}, Used = 1 ).Create() #TypeName="kWh"
                 Domoticz.Log("Device " + Devices[idx+1].Name + " created")
                 
             if(len(self.invertersSN)>1):
-                Domoticz.Device(Name="Total", Unit=len(Devices)+1, Type=243,Subtype=29, Switchtype=4,Options={"EnergyMeterMode" : "1"}, Used = 1).Create()          
+                Domoticz.Device(Name="Total", Unit=len(Devices)+1, TypeName="kWh", Switchtype=4, Options={"EnergyMeterMode" : "0"}, Used = 1).Create()          
                 Domoticz.Log("Device " + Devices[len(Devices)].Name + " created")
                 
         self.heartbeat = self.beatcount
