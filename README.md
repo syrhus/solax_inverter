@@ -10,6 +10,9 @@ Dans le plugin, il suffira ensuite de saisir:
   - adresse IP de Domoticz
   - Numéro du port de Domoticz
 
+Une fois les appareils créés, éditez les et vérifiez:
+  - Type : Return
+  - Energy read: From Device
 
 
 
@@ -24,3 +27,7 @@ In the plugin, enter:
   - the registration number(s) (the wifi module, not the inverter S/N)
   - Domoticz IP Address
   - Domoticz Port number
+
+Once devices created, edit and check its:
+  - Type : Return
+  - Energy read: From Device
