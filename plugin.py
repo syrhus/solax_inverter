@@ -4,7 +4,7 @@
 # Author: Syrhus
 #
 """
-<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.0.5" externallink="https://github.com/syrhus/solax_inverter">
+<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.1.0" externallink="https://github.com/syrhus/solax_inverter">
     <params>
 	    <param field="Address" label="IP Domoticz" width="250px" required="true"/>
 	    <param field="Port" label="Port Domoticz" width="100px" required="true"/>
@@ -22,74 +22,46 @@
 </plugin>
 """
 import Domoticz
-import json
+import requests
 import datetime
 
 
 #"https://www.eu.solaxcloud.com:9443/proxy/api/getRealtimeInfo.do?tokenId={}&sn={}"
-SOLAX_CLOUD_SITE = "www.eu.solaxcloud.com"
-SOLAX_CLOUD_PORT = "9443"
-SOLAX_API = "/proxy/api/getRealtimeInfo.do"
-SOLAX_CMD = "?tokenId={}&sn={}"
+SOLAX_CLOUD_SITE = "www.eu.solaxcloud.com";
+SOLAX_CLOUD_PORT = "9443";
+SOLAX_API = "/proxy/api/getRealtimeInfo.do";
+SOLAX_CMD = "?tokenId={}&sn={}";
 
-SOLAX_CURRENT = "acpower"
-SOLAX_SUM = "yieldtoday"
-SOLAX_TIME = "uploadTime"
-
+SOLAX_CURRENT = "acpower";
+SOLAX_SUM = "yieldtoday";
+SOLAX_TIME = "uploadTime";
+SERIAL_NUMBER = "sn";
 
 class BasePlugin:
     enabled = False
     def __init__(self):
         self.heartbeat = 0
-        self.currentInverter = 0
         self.cmds = list()
         self.currents = []
         self.cumuls = []
         self.invertersSN = list()
-        self.httpConn = None
-        self.DomoConn = None
         self.timedelta = 30
         self.previousState = None
         return
 
+    def url(self, json_cmd):
+        return 'http://' + Parameters["Address"] + ':'+ Parameters["Port"] + json_cmd
+
+    def request(self, cmd):
+        Domoticz.Debug(f"url:{cmd}")
+        response = requests.get(cmd)
+        if response.ok:
+            return response.json()
+
     def parseURL(self, Parameter):
-        return SOLAX_API + SOLAX_CMD.format(Parameters["Mode1"], Parameter)
+        return 'https://' + SOLAX_CLOUD_SITE + ':' +SOLAX_CLOUD_PORT + SOLAX_API + SOLAX_CMD.format(Parameters["Mode1"], Parameter)
 
-    def getSunset(self):
-        Domoticz.Debug('getSunset called')
-
-        nbInverters = len(self.invertersSN)
-        if(nbInverters > 1):
-            nbInverters += 1
-        
-        self.currents = [0] * nbInverters
-        self.cumuls = [0] * nbInverters
-        self.lasts= [None] * nbInverters
-
-        self.currentDate = datetime.datetime.now().date()
-        Domoticz.Debug("currentDate:" + str(self.currentDate))
-
-        self.DomoConn = Domoticz.Connection(Name="Domoticz", Transport="TCP/IP", Protocol="HTTP", Address=Parameters["Address"], Port=Parameters["Port"])
-        self.DomoConn.Connect()
-
-    def getData(self, num = 0):
-
-        self.currentInverter = num
-        if(not(self.httpConn and (self.httpConn.Connected() or self.httpConn.Connecting()))):
-            self.httpConn = Domoticz.Connection(Name="Solax", Transport="TCP/IP", Protocol="HTTPS", Address=SOLAX_CLOUD_SITE, Port=SOLAX_CLOUD_PORT)
-            self.httpConn.Connect()
-        else:
-            self.sendData(self.httpConn)
-
-                   
-    def addInverters(self):
-        self.invertersSN = Parameters["Mode2"].split(',')
-        for inverter in self.invertersSN:
-            self.cmds.append(self.parseURL(inverter))
-
-        
     def onStart(self):
-
         if Parameters["Mode6"] == "Debug":
             Domoticz.Debugging(1)
                
@@ -99,13 +71,13 @@ class BasePlugin:
         self.sunrise = datetime.time(7,30,0)
         self.sunrise = datetime.time(21,30,0)
                       
-        freq = int(Parameters["Mode5"])
-        if(freq<1):
+        self.freq = int(Parameters["Mode5"])
+        if(self.freq<1):
             Domoticz.Log("La fréquence de lecture des données ne peut pas être inférieure à 1 min")
             return
         
         Domoticz.Heartbeat(30)    
-        self.beatcount = freq*2#freq*6
+        self.beatcount = self.freq*2
         Domoticz.Debug("beatcount :" + str(self.beatcount))
         
         self.timedelta = int(Parameters["Mode3"])
@@ -125,97 +97,82 @@ class BasePlugin:
                 Domoticz.Log("Device " + Devices[len(Devices)].Name + " created")
                 
         self.heartbeat = self.beatcount
+
+    def getSunset(self):
+        Domoticz.Debug('getSunset called')
+
+        nbInverters = len(self.invertersSN)
+        if(nbInverters > 1):
+            nbInverters += 1
+        
+        self.currents = [0] * nbInverters
+        self.cumuls = [0] * nbInverters
+        self.timedOut= [False] * nbInverters
+
+        self.currentDate = datetime.datetime.now().date()
+        Domoticz.Debug("currentDate:" + str(self.currentDate))
+
+        cmd = '/json.htm?type=command&param=getSunRiseSet'
+        dJson = self.request(self.url(cmd))
+        Domoticz.Debug("result:" + str(dJson))
+        
+        delta = datetime.timedelta(minutes=self.timedelta)
+        self.sunrise = datetime.time(hour=int(dJson['Sunrise'].split(':')[0]),minute=int(dJson['Sunrise'].split(':')[1]),second=0)
+        self.sunset = datetime.time(hour=int(dJson['Sunset'].split(':')[0]),minute=int(dJson['Sunset'].split(':')[1]),second=0) 
+        
+        self.sunrise = (datetime.datetime.combine(datetime.date(1, 1, 1), self.sunrise) - delta).time()
+        self.sunset = (datetime.datetime.combine(datetime.date(1, 1, 1), self.sunset) + delta).time()
+
+        Domoticz.Debug("sunrise:" + str(self.sunrise))
+        Domoticz.Debug("sunset:" + str(self.sunset))
+
+    def getData(self):
+        for i,d in enumerate(self.invertersSN):
+            dJson = self.request(self.cmds[i])
+            Domoticz.Debug("result:" + str(dJson))
             
+            time = dJson["result"][SOLAX_TIME]
+            Domoticz.Debug("uploadTime:" + time)
+            
+            #date_format = "%Y-%m-%d %H:%M:%S"
+            #solax_date = datetime.datetime.strptime( time, date_format)
+            date_split = time.split()[0].split('-')
+            time_split = time.split()[1].split(':')
+            solax_date = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]))
+            solax_datetime = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]) , int(time_split[0]), int(time_split[1]), int(time_split[2]))
+            
+            time_delta = (datetime.datetime.now() - solax_datetime).total_seconds()
+            
+            Domoticz.Debug("DiffTime:" + str(time_delta))
+            
+            if self.currentDate != solax_date.date() or time_delta > (self.freq*60*2):
+                Domoticz.Log(Devices[i+1].Name + " (" + dJson["result"][SERIAL_NUMBER] + "):"+ time + " is obsolete")
+                Devices[i+1].Update(nValue=0, sValue="0", TimedOut = 1)
+                self.timedOut[i] = True
+            else:
+                self.timedOut[i] = False
+                self.currents[i] = int(dJson["result"][SOLAX_CURRENT])
+                self.cumuls[i] = int(float(dJson["result"][SOLAX_SUM])*1000)
+
+        self.updateDevices()
+                   
+    def addInverters(self):
+        self.invertersSN = Parameters["Mode2"].split(',')
+        for inverter in self.invertersSN:
+            self.cmds.append(self.parseURL(inverter))
+
     def onStop(self):
         Domoticz.Log("Plugin is stopping.")
-    
-    def cmdSunrise(self, Connection):
-        if(Connection.Connected):
-            headers = dict({"Accept": "application/json", 
-            "Content-Type": "application/json",
-            "Connection": "close",
-            "Host":Parameters["Address"] + Parameters["Port"]})
-
-            Connection.Send({
-                "Verb": "GET",
-                "URL": '/json.htm?type=command&param=getSunRiseSet',
-                "Headers": headers
-		    })
-        
-    def sendData(self, Connection):
-        if(Connection.Connected):
-            headers = dict({"Accept": "application/json", 
-            "Content-Type": "application/json",
-            #"Connection": "close",
-            "Host":SOLAX_CLOUD_SITE + SOLAX_CLOUD_PORT})
-
-            Domoticz.Debug("Current Inverter:" + str(self.currentInverter))
-            Connection.Send({
-                "Verb": "GET",
-                "URL": self.cmds[self.currentInverter],
-                "Headers": headers
-		    })
 		    
     def onConnect(self, Connection, Status, Description):
         Domoticz.Debug("Status:" + str(Status))
-        if(Connection == self.DomoConn):
-            self.cmdSunrise(Connection)
-        else:
-            self.sendData(Connection)
-	
 
     def onMessage(self, Connection, Data):
-        #Domoticz.Debug("Data:" + str(Data))
-       
-        if Data and "Data" in Data:
-            dJson = json.loads(Data["Data"].decode())
-            if Connection == self.DomoConn:
-                delta = datetime.timedelta(minutes=self.timedelta)
-                self.sunrise = datetime.time(hour=int(dJson['Sunrise'].split(':')[0]),minute=int(dJson['Sunrise'].split(':')[1]),second=0)
-                self.sunset = datetime.time(hour=int(dJson['Sunset'].split(':')[0]),minute=int(dJson['Sunset'].split(':')[1]),second=0) 
-                
-                self.sunrise = (datetime.datetime.combine(datetime.date(1, 1, 1), self.sunrise) - delta).time()
-                self.sunset = (datetime.datetime.combine(datetime.date(1, 1, 1), self.sunset) + delta).time()
-
-                Domoticz.Debug("sunrise:" + str(self.sunrise))
-                Domoticz.Debug("sunset:" + str(self.sunset))
-                self.DomoConn = None
-
-            else:
-                Domoticz.Debug("Current Inverter:" + str(self.currentInverter))
-                cur = self.currentInverter
-                
-                dJson = json.loads(Data["Data"].decode())
-                #check data is to date and not from last day cause wifi issue
-                
-                time = dJson["result"][SOLAX_TIME]
-                Domoticz.Debug("uploadTime:" + time)
-                
-                #date_format = "%Y-%m-%d %H:%M:%S"
-                #solax_date = datetime.datetime.strptime( time, date_format)
-                time_split = time.split()[0].split('-')
-                solax_date = datetime.datetime(int(time_split[0]),int(time_split[1]), int(time_split[2]))
-                if self.currentDate != solax_date.date():
-                    Domoticz.Debug(str(solax_date) + " is obsolete")
-                    return
-                
-                self.currents[cur] = int(dJson["result"][SOLAX_CURRENT])
-                self.cumuls[cur] = int(float(dJson["result"][SOLAX_SUM])*1000)
-                
-                if(cur+1 < len(self.invertersSN)):
-
-                    self.currentInverter += 1
-                    Domoticz.Debug("Load next inverter:" + str(self.currentInverter))
-                    self.getData(self.currentInverter)
-                else: 
-                    #Connection.Disconnect()
-                    self.currentInverter = 0
-                    self.updateDevices()
+        Domoticz.Debug("Data:" + str(Data))
 
     def onDisconnect(self, Connection):
         Domoticz.Log("Device has disconnected")
-        self.httpConn = None
-        
+
     def checkStatus(self, newStatus):
         if self.previousState != newStatus:
             self.previousState = newStatus
@@ -259,7 +216,7 @@ class BasePlugin:
 
 
             for i,d in enumerate(self.invertersSN):
-                
+                #if(not self.timedOut[i]):
                 self.cumuls[nbInverters]+=self.cumuls[i]
                 Domoticz.Debug("self.cumuls[" + str(i) + "]= " + str(self.cumuls[i]) )
                 Domoticz.Debug("self.cumuls[" + str(nbInverters) + "]= " + str(self.cumuls[nbInverters]) )
@@ -268,7 +225,8 @@ class BasePlugin:
                 Domoticz.Debug("self.currents[" + str(nbInverters) + "]= " + str(self.currents[nbInverters]) )
 
         for i,d in enumerate(Devices):
-            self.updateDevice(i+1)
+            if(not self.timedOut[i]):
+                self.updateDevice(i+1)
 
     def updateDevice(self, Unit):
         Domoticz.Debug("updateDevice called " + str(Unit))
@@ -277,8 +235,8 @@ class BasePlugin:
             strValue =  str(self.currents[Unit-1]) + ";" + str(self.cumuls[Unit-1])
             Domoticz.Debug("strValue :" + strValue)
             if(Devices[Unit].sValue != strValue):
-                Devices[Unit].Update(nValue=0, sValue=strValue)
-                Domoticz.Log("Update 0:'"+ strValue +"' ("+Devices[Unit].Name+")")
+                Devices[Unit].Update(nValue=0, sValue=strValue, TimedOut = 0)
+                Domoticz.Log("Update ("+ Devices[Unit].Name + ") current="+ str(self.currents[Unit-1]) +"W  cumul="+ str(self.cumuls[Unit-1]) +"W")
         return            
 
 global _plugin
