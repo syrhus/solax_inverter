@@ -69,7 +69,7 @@ class BasePlugin:
         
         #default value
         self.sunrise = datetime.time(7,30,0)
-        self.sunrise = datetime.time(21,30,0)
+        self.sunset = datetime.time(21,30,0)
                       
         self.freq = int(Parameters["Mode5"])
         if(self.freq<1):
