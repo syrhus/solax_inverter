@@ -4,13 +4,14 @@
 # Author: Syrhus
 #
 """
-<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.1.0" externallink="https://github.com/syrhus/solax_inverter">
+<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.2.0" externallink="https://github.com/syrhus/solax_inverter">
     <params>
-	    <param field="Address" label="IP Domoticz" width="250px" required="true"/>
-	    <param field="Port" label="Port Domoticz" width="100px" required="true"/>
+        <param field="Address" label="IP Domoticz" width="250px" required="true"/>
+        <param field="Port" label="Port Domoticz" width="100px" required="true"/>
         <param field="Mode1" label="TokenID" width="250px" required="true"/>
         <param field="Mode2" label="N°enregistrement(s) (si plusieurs, utiliser ',' pour séparer chaque onduleur)" width="300px" required="true"/>
         <param field="Mode3" label="Minutes avant/après le lever/coucher du soleil" width="50px" default="30" required="true"/>
+        <param field="Mode4" label="Heure d'été(1=Oui, 0=Non)" width="50px" default="1" required="true"/>
         <param field="Mode5" label="Fréquence MaJ (min)" width="50px" required="true" default="5"/>
         <param field="Mode6" label="Debug" width="75px">
             <options>
@@ -47,6 +48,7 @@ class BasePlugin:
         self.invertersSN = list()
         self.timedelta = 30
         self.previousState = None
+        self.summerTime = 1
         return
 
     def url(self, json_cmd):
@@ -69,7 +71,7 @@ class BasePlugin:
         
         #default value
         self.sunrise = datetime.time(7,30,0)
-        self.sunset = datetime.time(21,30,0)
+        self.sunrise = datetime.time(21,30,0)
                       
         self.freq = int(Parameters["Mode5"])
         if(self.freq<1):
@@ -81,6 +83,7 @@ class BasePlugin:
         Domoticz.Debug("beatcount :" + str(self.beatcount))
         
         self.timedelta = int(Parameters["Mode3"])
+        self.summerTime = int(Parameters["Mode4"])
         
         self.addInverters()
                         
@@ -139,7 +142,7 @@ class BasePlugin:
             date_split = time.split()[0].split('-')
             time_split = time.split()[1].split(':')
             solax_date = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]))
-            solax_datetime = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]) , int(time_split[0]), int(time_split[1]), int(time_split[2]))
+            solax_datetime = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]) , int(time_split[0])+ self.summerTime, int(time_split[1]), int(time_split[2]))
             
             time_delta = (datetime.datetime.now() - solax_datetime).total_seconds()
             
