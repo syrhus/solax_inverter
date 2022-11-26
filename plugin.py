@@ -4,7 +4,7 @@
 # Author: Syrhus
 #
 """
-<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.2.1" externallink="https://github.com/syrhus/solax_inverter">
+<plugin key="solax_power" name="Solax Inverter" author="syrhus" version="1.2.2" externallink="https://github.com/syrhus/solax_inverter">
     <params>
         <param field="Address" label="IP Domoticz" width="250px" required="true"/>
         <param field="Port" label="Port Domoticz" width="100px" required="true"/>
@@ -131,28 +131,31 @@ class BasePlugin:
             dJson = self.request(self.cmds[i])
             Domoticz.Debug("result:" + str(dJson))
             
-            time = dJson["result"][SOLAX_TIME]
-            Domoticz.Debug("uploadTime:" + time)
-            
-            #date_format = "%Y-%m-%d %H:%M:%S"
-            #solax_date = datetime.datetime.strptime( time, date_format)
-            date_split = time.split()[0].split('-')
-            time_split = time.split()[1].split(':')
-            solax_date = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]))
-            solax_datetime = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]) , int(time_split[0]), int(time_split[1]), int(time_split[2]))
-            
-            time_delta = (datetime.datetime.now() - solax_datetime).total_seconds()
-            
-            Domoticz.Debug("DiffTime:" + str(time_delta))
-            
-            if self.currentDate != solax_date.date() or time_delta > (self.freq*60*2):
-                Domoticz.Log(Devices[i+1].Name + " (" + dJson["result"][SERIAL_NUMBER] + "):"+ time + " is obsolete")
-                Devices[i+1].Update(nValue=0, sValue="0", TimedOut = 1)
-                self.timedOut[i] = True
+            if dJson["success"] :
+                time = dJson["result"][SOLAX_TIME]
+                Domoticz.Debug("uploadTime:" + time)
+                
+                #date_format = "%Y-%m-%d %H:%M:%S"
+                #solax_date = datetime.datetime.strptime( time, date_format)
+                date_split = time.split()[0].split('-')
+                time_split = time.split()[1].split(':')
+                solax_date = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]))
+                solax_datetime = datetime.datetime(int(date_split[0]),int(date_split[1]), int(date_split[2]) , int(time_split[0])+ self.summerTime, int(time_split[1]), int(time_split[2]))
+                
+                time_delta = (datetime.datetime.now() - solax_datetime).total_seconds()
+                
+                Domoticz.Debug("DiffTime:" + str(time_delta))
+                
+                if self.currentDate != solax_date.date() or time_delta > (self.freq*60*2):
+                    Domoticz.Log(Devices[i+1].Name + " (" + dJson["result"][SERIAL_NUMBER] + "):"+ time + " is obsolete")
+                    #Devices[i+1].Update(nValue=0, sValue="0", TimedOut = 1)
+                    self.timedOut[i] = True
+                else:
+                    self.timedOut[i] = False
+                    self.currents[i] = int(dJson["result"][SOLAX_CURRENT])
+                    self.cumuls[i] = int(float(dJson["result"][SOLAX_SUM])*1000)
             else:
-                self.timedOut[i] = False
-                self.currents[i] = int(dJson["result"][SOLAX_CURRENT])
-                self.cumuls[i] = int(float(dJson["result"][SOLAX_SUM])*1000)
+                self.timedOut[i] = True
 
         self.updateDevices()
                    
