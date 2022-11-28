@@ -11,6 +11,7 @@
         <param field="Mode1" label="TokenID" width="250px" required="true"/>
         <param field="Mode2" label="N°enregistrement(s) (si plusieurs, utiliser ',' pour séparer chaque onduleur)" width="300px" required="true"/>
         <param field="Mode3" label="Minutes avant/après le lever/coucher du soleil" width="50px" default="30" required="true"/>
+	<param field="Mode4" label="Heure d'été(1=Oui, 0=Non)" width="50px" default="1" required="true"/>
         <param field="Mode5" label="Fréquence MaJ (min)" width="50px" required="true" default="5"/>
         <param field="Mode6" label="Debug" width="75px">
             <options>
@@ -47,6 +48,7 @@ class BasePlugin:
         self.invertersSN = list()
         self.timedelta = 30
         self.previousState = None
+        self.summerTime = 1
         return
 
     def url(self, json_cmd):
@@ -55,7 +57,9 @@ class BasePlugin:
     def request(self, cmd):
         Domoticz.Debug(f"url:{cmd}")
         response = requests.get(cmd)
+        Domoticz.Debug(f"response:{response}")
         if response.ok:
+            response.connection.close()
             return response.json()
 
     def parseURL(self, Parameter):
@@ -81,7 +85,8 @@ class BasePlugin:
         Domoticz.Debug("beatcount :" + str(self.beatcount))
         
         self.timedelta = int(Parameters["Mode3"])
-        
+        self.summerTime = int(Parameters["Mode4"])
+	
         self.addInverters()
                         
         self.getSunset()
